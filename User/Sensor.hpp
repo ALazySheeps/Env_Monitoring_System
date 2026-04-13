@@ -4,6 +4,9 @@
 #include "main.h"
 #include <string.h>
 
+#define V25 1.43f // 25°C 时的传感器电压
+#define Avg_Slope 0.0043f // 平均斜率 (mV
+
 class Sensor {
 protected:
     int16_t raw_data;
@@ -16,7 +19,7 @@ public:
         memcpy(this->name, name, 20);
     }
     virtual ~Sensor() = default;
-    void setRawData(int16_t raw_data)
+    virtual void setRawData(int16_t raw_data)
     {
         this->raw_data = raw_data;
     }
@@ -27,13 +30,119 @@ public:
     }
 };
 
-class TemperatureSensor : public Sensor {
+class LightSensor : public Sensor {
 public:
-    TemperatureSensor(uint8_t* name, uint8_t id) : Sensor(name, id) {}
+    LightSensor(uint8_t* name, uint8_t id) : Sensor(name, id) {}
+    float getData() override
+    {
+        // Convert raw_data to light intensity
+        data = static_cast<float>(raw_data)*100.0f/4095.0f; 
+        return data;
+    }
+};
+
+
+class TemperatureSensor : public Sensor {
+private:
+    static constexpr int AVG_COUNT = 20;
+    float history[AVG_COUNT];
+    int history_index = 0;
+    int history_filled = 0;
+public:
+    TemperatureSensor(uint8_t* name, uint8_t id) : Sensor(name, id)
+    {
+        memset(history, 0, sizeof(history));
+    }
+
+    void setRawData(int16_t raw_data) override
+    {
+        Sensor::setRawData(raw_data);
+        float temp = static_cast<float>(raw_data) / 100.0f;
+        history[history_index] = temp;
+        history_index = (history_index + 1) % AVG_COUNT;
+        if (history_filled < AVG_COUNT) {
+            history_filled++;
+        }
+    }
+
+    float getData() override
+    {
+        float sum = 0.0f;
+        int count = history_filled > 0 ? history_filled : 1;
+        for (int i = 0; i < history_filled; i++) {
+            sum += history[i];
+        }
+        data = sum / count;
+        return data;
+    }
+};
+
+class GrayscaleSensor : public Sensor {
+public:
+    GrayscaleSensor(uint8_t* name, uint8_t id) : Sensor(name, id) {}
+    float getData() override
+    {
+        // Convert raw_data to grayscale value
+        data = static_cast<float>(raw_data)*100.0f/4095.0f;
+        return data;
+    }
+};
+
+// 内部电压参考传感器
+class RefintSensor : public Sensor {
+public:
+    RefintSensor(uint8_t* name, uint8_t id) : Sensor(name, id) {}
     float getData() override
     {
         // Convert raw_data to temperature in Celsius
-        data = (raw_data / 1024.0f) * 100.0f; // Example conversion
+        data = 1.20f * 4095.0f / static_cast<float>(raw_data); 
+        return data;
+    }
+};
+
+class InternalTemperatureSensor : public Sensor {
+private:
+    static constexpr int AVG_COUNT = 20;
+    float history[AVG_COUNT];
+    int history_index = 0;
+    int history_filled = 0;
+public:
+    InternalTemperatureSensor(uint8_t* name, uint8_t id) : Sensor(name, id)
+    {
+        memset(history, 0, sizeof(history));
+    }
+
+    void setRawData(int16_t raw_data) override
+    {
+        Sensor::setRawData(raw_data);
+        float vol_sensor = static_cast<float>(raw_data) * 3.3f / 4095.0f;
+        history[history_index] = (V25 - vol_sensor) / Avg_Slope + 25.0f;
+        history_index = (history_index + 1) % AVG_COUNT;
+        if (history_filled < AVG_COUNT) {
+            history_filled++;
+        }
+    }
+
+    float getData() override
+    {
+        float sum = 0.0f;
+        int count = history_filled > 0 ? history_filled : 1;
+        for (int i = 0; i < history_filled; i++) {
+            sum += history[i];
+        }
+        data = sum / count;
+        return data;
+    }
+};
+
+// 外部电压参考传感器
+class VrefSensor : public Sensor {
+public:
+    VrefSensor(uint8_t* name, uint8_t id) : Sensor(name, id) {}
+    float getData() override
+    {
+        // Convert raw_data to temperature in Celsius
+        data = static_cast<float>(raw_data)*3.3f/4095.0f; 
         return data;
     }
 };

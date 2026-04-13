@@ -21,6 +21,8 @@
 #include "adc.h"
 #include "dma.h"
 #include "gpio.h"
+#include "stm32f1xx_hal_adc.h"
+#include "tim.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -35,17 +37,19 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-uint16_t sensor_data[SensorCount]; // ADC 缓冲区
+float sensor_data[SensorCount+1]; // ADC 缓冲区
 Sensors sensors(SensorCount); // 假设有6个传感器
 // 外部传感器
-Sensor lightSensor1((uint8_t*)"lightSensor1", 0);
-Sensor lightSensor2((uint8_t*)"lightSensor2", 1);
-Sensor tempSensor((uint8_t*)"tempSensor", 2);
-Sensor grayscaleSensor((uint8_t*)"grayscaleSensor", 3);
+LightSensor lightSensor1((uint8_t*)"lightSensor1", 0);
+LightSensor lightSensor2((uint8_t*)"lightSensor2", 1);
+TemperatureSensor tempSensor((uint8_t*)"tempSensor", 2);
+VrefSensor vrefSensor((uint8_t*)"vrefSensor", 3);
+
+GrayscaleSensor grayscaleSensor((uint8_t*)"grayscaleSensor", 6);
 
 // 内部传感器
-Sensor vrefSensor((uint8_t*)"VREFINT", 4);
-Sensor internalTempSensor((uint8_t*)"InternalTemp", 5);
+RefintSensor refintSensor((uint8_t*)"refintSensor", 4);
+InternalTemperatureSensor internalTempSensor((uint8_t*)"InternalTemp", 5);
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -101,6 +105,7 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_ADC1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   // ========== 【ADC 校准 开始】 ==========
   HAL_ADC_Stop(&hadc1);               // 先停止 ADC（防止正在运行）
@@ -110,12 +115,21 @@ int main(void)
   sensors.addSensor(0, &lightSensor1);
   sensors.addSensor(1, &lightSensor2);
   sensors.addSensor(2, &tempSensor);
-  sensors.addSensor(3, &grayscaleSensor);
-  sensors.addSensor(4, &vrefSensor);
+  sensors.addSensor(3, &vrefSensor);
+  sensors.addSensor(4, &refintSensor);
   sensors.addSensor(5, &internalTempSensor);
 
 
+  //HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sensors.getAdcBuf(), SensorCount);
+  // 启动 DMA（单次模式）
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sensors.getAdcBuf(), SensorCount);
+
+  // 启动定时器 100ms 触发
+  HAL_TIM_Base_Start(&htim3);
+
+  // 启动 ADC 硬件触发
+  HAL_ADC_Start(&hadc1);
+  HAL_ADCEx_InjectedStart_IT(&hadc1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -123,7 +137,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+       
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -180,13 +194,31 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
     if (hadc->Instance == ADC1)
     {
+      // 规则组转换完成
+      if (hadc->State & HAL_ADC_STATE_REG_EOC)
+      {
         // 在这里处理 ADC 转换完成后的数据
         sensors.update();
         for (int i = 0; i < SensorCount; i++) {
             sensor_data[i] = sensors.getSensor(i); 
         }
+        __HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_EOC); // 手动清 EOC
+      }
     }
 }
+
+void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    if (hadc->Instance == ADC1)
+    {
+        // 注入组转换完成
+        grayscaleSensor.setRawData(HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1));
+        sensor_data[6] = grayscaleSensor.getData();
+        
+        __HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_JEOC); // 手动清 EOC
+    }
+}
+
 /* USER CODE END 4 */
 
 /**

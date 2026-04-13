@@ -57,6 +57,9 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define Trigger_Key_Pin GPIO_PIN_15
+#define Trigger_Key_GPIO_Port GPIOB
+#define Trigger_Key_EXTI_IRQn EXTI15_10_IRQn
 
 /* USER CODE BEGIN Private defines */
 
