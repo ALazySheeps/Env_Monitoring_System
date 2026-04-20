@@ -4,6 +4,8 @@
 #include "main.h"
 #include <string.h>
 
+extern float measuredRefVoltage;
+
 #define V25 1.43f // 25°C 时的传感器电压
 #define Avg_Slope 0.0043f // 平均斜率 (mV
 
@@ -92,10 +94,15 @@ public:
 class RefintSensor : public Sensor {
 public:
     RefintSensor(uint8_t* name, uint8_t id) : Sensor(name, id) {}
+    void setRawData(int16_t raw_data) override
+    {
+        Sensor::setRawData(raw_data);
+        measuredRefVoltage = getData();
+    }
     float getData() override
     {
-        // Convert raw_data to temperature in Celsius
-        data = 1.20f * 4095.0f / static_cast<float>(raw_data); 
+        // Convert raw_data to reference voltage Vdda
+        data = 1.20f * 4095.0f / static_cast<float>(raw_data);
         return data;
     }
 };
@@ -115,7 +122,7 @@ public:
     void setRawData(int16_t raw_data) override
     {
         Sensor::setRawData(raw_data);
-        float vol_sensor = static_cast<float>(raw_data) * 3.3f / 4095.0f;
+        float vol_sensor = static_cast<float>(raw_data) * measuredRefVoltage / 4095.0f;
         history[history_index] = (V25 - vol_sensor) / Avg_Slope + 25.0f;
         history_index = (history_index + 1) % AVG_COUNT;
         if (history_filled < AVG_COUNT) {

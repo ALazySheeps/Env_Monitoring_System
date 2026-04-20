@@ -22,12 +22,22 @@
 #include "dma.h"
 #include "gpio.h"
 #include "stm32f1xx_hal_adc.h"
+#include "i2c.h"
 #include "tim.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "Sensor.hpp"
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "oled.h"
 #include <sys/types.h>
+
+#ifdef __cplusplus
+}
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,6 +47,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+float measuredRefVoltage = 3.3f;
 float sensor_data[SensorCount+1]; // ADC 缓冲区
 Sensors sensors(SensorCount); // 假设有6个传感器
 // 外部传感器
@@ -48,8 +59,8 @@ VrefSensor vrefSensor((uint8_t*)"vrefSensor", 3);
 GrayscaleSensor grayscaleSensor((uint8_t*)"grayscaleSensor", 6);
 
 // 内部传感器
-RefintSensor refintSensor((uint8_t*)"refintSensor", 4);
-InternalTemperatureSensor internalTempSensor((uint8_t*)"InternalTemp", 5);
+InternalTemperatureSensor internalTempSensor((uint8_t*)"InternalTemp", 4);
+RefintSensor refintSensor((uint8_t*)"refintSensor", 5);
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -106,6 +117,8 @@ int main(void)
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_TIM3_Init();
+  MX_I2C1_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   // ========== 【ADC 校准 开始】 ==========
   HAL_ADC_Stop(&hadc1);               // 先停止 ADC（防止正在运行）
@@ -116,8 +129,8 @@ int main(void)
   sensors.addSensor(1, &lightSensor2);
   sensors.addSensor(2, &tempSensor);
   sensors.addSensor(3, &vrefSensor);
-  sensors.addSensor(4, &refintSensor);
-  sensors.addSensor(5, &internalTempSensor);
+  sensors.addSensor(4, &internalTempSensor);
+  sensors.addSensor(5, &refintSensor);
 
 
   //HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sensors.getAdcBuf(), SensorCount);
@@ -130,12 +143,39 @@ int main(void)
   // 启动 ADC 硬件触发
   HAL_ADC_Start(&hadc1);
   HAL_ADCEx_InjectedStart_IT(&hadc1);
+
+  // 启动编码器计数
+  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+
+  OLED_Init();
+  OLED_Clear();
+  OLED_Display_On();
+  OLED_ShowString(0, 0, "L1:", 12, 0);
+  OLED_ShowString(0, 1, "L2:", 12, 0);
+  OLED_ShowString(0, 2, "T:", 12, 0);
+  OLED_ShowString(0, 3, "V:", 12, 0);
+  OLED_ShowString(0, 4, "IT:", 12, 0);
+  OLED_ShowString(0, 5, "IV:", 12, 0);
+  OLED_ShowString(0, 6, "Gr:", 12, 1);
+  OLED_ShowString(0, 7, "Ed:", 12, 0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    int16_t encoder = (int16_t)__HAL_TIM_GET_COUNTER(&htim2); // 读取编码器计数值
+    OLED_Showdecimal(24, 0, sensor_data[0], 2, 2, 12, 0);
+    OLED_Showdecimal(24, 1, sensor_data[1], 2, 2, 12, 0);
+    OLED_Showdecimal(24, 2, sensor_data[2], 2, 2, 12, 0);
+    OLED_Showdecimal(24, 3, sensor_data[3], 2, 2, 12, 0);
+    OLED_Showdecimal(24, 4, sensor_data[4], 2, 2, 12, 0);
+    OLED_Showdecimal(24, 5, sensor_data[5], 2, 2, 12, 0);
+    OLED_Showdecimal(24, 6, sensor_data[6], 2, 2, 12, 0);
+
+    // OLED_ShowString(24, 7, "     ", 12, 0); // 清除旧的编码器值
+    OLED_ShowInt(24, 7, encoder, 3, 12, 0);
+
     /* USER CODE END WHILE */
        
     /* USER CODE BEGIN 3 */

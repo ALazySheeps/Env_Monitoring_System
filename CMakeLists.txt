@@ -67,6 +67,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/Core/Src/main.c
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/Core/Src)
 
 USER_ADD_DIR(${CMAKE_SOURCE_DIR}/User)
+USER_ADD_DIR(${CMAKE_SOURCE_DIR}/User/Sensor)
+USER_ADD_DIR(${CMAKE_SOURCE_DIR}/User/OLED)
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
         stm32cubemx
