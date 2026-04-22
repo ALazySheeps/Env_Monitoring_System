@@ -15,6 +15,10 @@ obj/
 compile_commands.json
 .mxproject
 
+.claude/settings.json
+*.env
+*.secret
+
 # CMake files
 CMakeCache.txt
 CMakeFiles/

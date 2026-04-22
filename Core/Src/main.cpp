@@ -32,7 +32,8 @@
 extern "C" {
 #endif
 
-#include "oled.h"
+// #include "OLED_UI.h"
+#include "OLED_UI_MenuData.h"
 #include <sys/types.h>
 
 #ifdef __cplusplus
@@ -48,7 +49,13 @@ extern "C" {
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 float measuredRefVoltage = 3.3f;
-float sensor_data[SensorCount+1]; // ADC 缓冲区
+#ifdef __cplusplus
+extern "C" {
+#endif
+float sensor_data[SensorCount+1];
+#ifdef __cplusplus
+}
+#endif
 Sensors sensors(SensorCount); // 假设有6个传感器
 // 外部传感器
 LightSensor lightSensor1((uint8_t*)"lightSensor1", 0);
@@ -119,6 +126,7 @@ int main(void)
   MX_TIM3_Init();
   MX_I2C1_Init();
   MX_TIM2_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   // ========== 【ADC 校准 开始】 ==========
   HAL_ADC_Stop(&hadc1);               // 先停止 ADC（防止正在运行）
@@ -144,37 +152,14 @@ int main(void)
   HAL_ADC_Start(&hadc1);
   HAL_ADCEx_InjectedStart_IT(&hadc1);
 
-  // 启动编码器计数
-  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
-
-  OLED_Init();
-  OLED_Clear();
-  OLED_Display_On();
-  OLED_ShowString(0, 0, "L1:", 12, 0);
-  OLED_ShowString(0, 1, "L2:", 12, 0);
-  OLED_ShowString(0, 2, "T:", 12, 0);
-  OLED_ShowString(0, 3, "V:", 12, 0);
-  OLED_ShowString(0, 4, "IT:", 12, 0);
-  OLED_ShowString(0, 5, "IV:", 12, 0);
-  OLED_ShowString(0, 6, "Gr:", 12, 1);
-  OLED_ShowString(0, 7, "Ed:", 12, 0);
+  OLED_UI_Init(&MainMenuPage);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    int16_t encoder = (int16_t)__HAL_TIM_GET_COUNTER(&htim2); // 读取编码器计数值
-    OLED_Showdecimal(24, 0, sensor_data[0], 2, 2, 12, 0);
-    OLED_Showdecimal(24, 1, sensor_data[1], 2, 2, 12, 0);
-    OLED_Showdecimal(24, 2, sensor_data[2], 2, 2, 12, 0);
-    OLED_Showdecimal(24, 3, sensor_data[3], 2, 2, 12, 0);
-    OLED_Showdecimal(24, 4, sensor_data[4], 2, 2, 12, 0);
-    OLED_Showdecimal(24, 5, sensor_data[5], 2, 2, 12, 0);
-    OLED_Showdecimal(24, 6, sensor_data[6], 2, 2, 12, 0);
-
-    // OLED_ShowString(24, 7, "     ", 12, 0); // 清除旧的编码器值
-    OLED_ShowInt(24, 7, encoder, 3, 12, 0);
+    OLED_UI_MainLoop();
 
     /* USER CODE END WHILE */
        
@@ -230,6 +215,14 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+extern "C" void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM4)
+  {
+    OLED_UI_InterruptHandler();
+  }
+}
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
     if (hadc->Instance == ADC1)

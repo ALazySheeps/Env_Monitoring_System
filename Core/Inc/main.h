@@ -57,14 +57,22 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define Key_Pin GPIO_PIN_1
-#define Key_GPIO_Port GPIOB
-#define Key_EXTI_IRQn EXTI1_IRQn
+#define Key1_Pin GPIO_PIN_1
+#define Key1_GPIO_Port GPIOB
+#define Key1_EXTI_IRQn EXTI1_IRQn
+#define Key2_Pin GPIO_PIN_2
+#define Key2_GPIO_Port GPIOB
+#define Key2_EXTI_IRQn EXTI2_IRQn
 #define Trigger_Key_Pin GPIO_PIN_15
 #define Trigger_Key_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-
+/* OLED_UI button definitions */
+#define KEY_ENTER_Pin Key2_Pin           // PB2 - 确认键
+#define KEY_ENTER_GPIO_Port Key2_GPIO_Port
+#define KEY_BACK_Pin Key1_Pin            // PB1 - 返回键
+#define KEY_BACK_GPIO_Port Key1_GPIO_Port
+// #define Encoder_Get() (__HAL_TIM_GET_COUNTER(&htim2))
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
