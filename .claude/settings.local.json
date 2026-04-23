@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cmake --build build --target all -j)"
+      "Bash(cmake --build build --target all -j)",
+      "Bash(arm-none-eabi-gdb:*)",
+      "Bash(target remote:*)",
+      "Bash(load:*)",
+      "Bash(monitor reset:*)",
+      "Bash(b main:*)",
+      "Bash(c:*)"
     ]
   }
 }

@@ -13,8 +13,9 @@ set(CMAKE_CXX_EXTENSIONS ON)
 set(SIZE arm-none-eabi-size)
 
 # Define the build type
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Debug")
+# Default to a size-oriented configuration for the 64KB STM32F103 target.
+if(NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_BUILD_TYPE "MinSizeRel" CACHE STRING "Build type" FORCE)
 endif()
 
 # Enable compile command to ease indexing with e.g. clangd

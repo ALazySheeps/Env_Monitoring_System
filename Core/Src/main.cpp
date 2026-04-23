@@ -24,6 +24,7 @@
 #include "stm32f1xx_hal_adc.h"
 #include "i2c.h"
 #include "tim.h"
+#include "usart.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -68,6 +69,9 @@ GrayscaleSensor grayscaleSensor((uint8_t*)"grayscaleSensor", 6);
 // 内部传感器
 InternalTemperatureSensor internalTempSensor((uint8_t*)"InternalTemp", 4);
 RefintSensor refintSensor((uint8_t*)"refintSensor", 5);
+
+
+char title[] = "Env Sensor:";
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -89,6 +93,98 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static volatile uint8_t uart_report_pending = 0;
+static uint16_t tim4_20ms_counter = 0;
+static volatile uint8_t uart_tx_busy = 0;
+static uint8_t uart_tx_buf[256];
+static uint16_t uart_tx_len = 0;
+
+static const char *uart_sensor_names[SensorCount + 1] = {
+    "Light1",
+    "Light2",
+    "Temp",
+    "Vref",
+    "IntTemp",
+    "RefInt",
+    "Gray",
+};
+
+static char *append_cstr(char *dst, const char *src)
+{
+  while (*src) {
+    *dst++ = *src++;
+  }
+  return dst;
+}
+
+static char *append_u32_dec(char *dst, uint32_t v)
+{
+  char tmp[10];
+  uint8_t n = 0;
+  do {
+    tmp[n++] = (char)('0' + (v % 10U));
+    v /= 10U;
+  } while (v && n < sizeof(tmp));
+
+  while (n--) {
+    *dst++ = tmp[n];
+  }
+  return dst;
+}
+
+static char *append_value_2dp(char *dst, float v)
+{
+  int32_t v100 = (int32_t)(v * 100.0f);
+  char sign = '+';
+  if (v100 < 0) {
+    sign = '-';
+    v100 = -v100;
+  }
+
+  uint32_t int_part = (uint32_t)(v100 / 100);
+  uint32_t frac_part = (uint32_t)(v100 % 100);
+
+  *dst++ = sign;
+  dst = append_u32_dec(dst, int_part);
+  *dst++ = '.';
+  *dst++ = (char)('0' + (frac_part / 10U));
+  *dst++ = (char)('0' + (frac_part % 10U));
+  return dst;
+}
+
+static uint8_t uart_send_sensor_report_dma(void)
+{
+  if (uart_tx_busy) {
+    return 0;
+  }
+
+  char *p = (char *)uart_tx_buf;
+
+  p = append_cstr(p, title);
+  *p++ = '\r';
+  *p++ = '\n';
+  for (uint8_t i = 0; i < (SensorCount + 1); i++) {
+    p = append_cstr(p, uart_sensor_names[i]);
+    *p++ = ':';
+    *p++ = ' ';
+    p = append_value_2dp(p, sensor_data[i]);
+    *p++ = '\r';
+    *p++ = '\n';
+  }
+  *p++ = '\r';
+  *p++ = '\n';
+
+  uart_tx_len = (uint16_t)(p - (char *)uart_tx_buf);
+  uart_tx_busy = 1;
+  if (HAL_UART_Transmit_DMA(&huart1, uart_tx_buf, uart_tx_len) != HAL_OK) {
+    uart_tx_busy = 0;
+    uart_tx_len = 0;
+    return 0;
+  }
+
+  return 1;
+}
 
 /* USER CODE END 0 */
 
@@ -127,6 +223,7 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM2_Init();
   MX_TIM4_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   // ========== 【ADC 校准 开始】 ==========
   HAL_ADC_Stop(&hadc1);               // 先停止 ADC（防止正在运行）
@@ -160,6 +257,12 @@ int main(void)
   while (1)
   {
     OLED_UI_MainLoop();
+    
+    if (uart_report_pending) {
+      if (uart_send_sensor_report_dma()) {
+        uart_report_pending = 0;
+      }
+    }
 
     /* USER CODE END WHILE */
        
@@ -220,6 +323,28 @@ extern "C" void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM4)
   {
     OLED_UI_InterruptHandler();
+
+    if (!uart_report_pending && !uart_tx_busy) {
+      tim4_20ms_counter++;
+      if (tim4_20ms_counter >= 100U) {
+        tim4_20ms_counter = 0;
+        uart_report_pending = 1;
+      }
+    }
+  }
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART1) {
+    uart_tx_busy = 0;
+  }
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART1) {
+    uart_tx_busy = 0;
   }
 }
 

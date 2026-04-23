@@ -15,7 +15,7 @@ obj/
 compile_commands.json
 .mxproject
 
-.claude/settings.json
+.claude/
 *.env
 *.secret
 

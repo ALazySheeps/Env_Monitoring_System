@@ -3,16 +3,62 @@
 uint8_t OLED_DisplayBuf[OLED_HEIGHT / 8][OLED_WIDTH];
 
 static bool OLED_ColorMode = true;
+static volatile uint8_t oled_i2c_dma_done = 1;
+static volatile uint8_t oled_i2c_dma_error = 0;
+
+#define OLED_I2C_ADDR         0x78
+#define OLED_I2C_CMD_REG      0x00
+#define OLED_I2C_DATA_REG     0x40
+#define OLED_I2C_TIMEOUT_MS   100U
+
+static HAL_StatusTypeDef oled_wait_i2c_ready(uint32_t timeout_ms)
+{
+	uint32_t start = HAL_GetTick();
+
+	while (HAL_I2C_GetState(&hi2c1) != HAL_I2C_STATE_READY) {
+		if ((HAL_GetTick() - start) >= timeout_ms) {
+			return HAL_TIMEOUT;
+		}
+	}
+
+	return HAL_OK;
+}
+
+static HAL_StatusTypeDef oled_mem_write_dma(uint16_t mem_addr, uint8_t *data, uint16_t len)
+{
+	HAL_StatusTypeDef status = oled_wait_i2c_ready(OLED_I2C_TIMEOUT_MS);
+	if (status != HAL_OK) {
+		return status;
+	}
+
+	oled_i2c_dma_done = 0;
+	oled_i2c_dma_error = 0;
+
+	status = HAL_I2C_Mem_Write_DMA(&hi2c1, OLED_I2C_ADDR, mem_addr, I2C_MEMADD_SIZE_8BIT, data, len);
+	if (status != HAL_OK) {
+		oled_i2c_dma_done = 1;
+		return status;
+	}
+
+	uint32_t start = HAL_GetTick();
+	while (!oled_i2c_dma_done) {
+		if ((HAL_GetTick() - start) >= OLED_I2C_TIMEOUT_MS) {
+			return HAL_TIMEOUT;
+		}
+	}
+
+	return oled_i2c_dma_error ? HAL_ERROR : HAL_OK;
+}
 
 static void oled_write_cmd(uint8_t cmd)
 {
-	HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x00, I2C_MEMADD_SIZE_8BIT, &cmd, 1, 100);
+	(void)oled_mem_write_dma(OLED_I2C_CMD_REG, &cmd, 1);
 }
 
 static void oled_write_data(const uint8_t *data, uint16_t len)
 {
 	if (OLED_ColorMode) {
-		HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x40, I2C_MEMADD_SIZE_8BIT, (uint8_t *)data, len, 100);
+		(void)oled_mem_write_dma(OLED_I2C_DATA_REG, (uint8_t *)data, len);
 		return;
 	}
 
@@ -22,7 +68,7 @@ static void oled_write_data(const uint8_t *data, uint16_t len)
 		for (uint16_t i = 0; i < chunk; i++) {
 			tmp[i] = (uint8_t)~data[i];
 		}
-		HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x40, I2C_MEMADD_SIZE_8BIT, tmp, chunk, 100);
+		(void)oled_mem_write_dma(OLED_I2C_DATA_REG, tmp, chunk);
 		data += chunk;
 		len -= chunk;
 	}
@@ -127,6 +173,21 @@ void OLED_UpdateArea(uint8_t X, uint8_t Y, uint8_t Width, uint8_t Height)
 	}
 }
 
+void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+	if (hi2c->Instance == I2C1) {
+		oled_i2c_dma_done = 1;
+		oled_i2c_dma_error = 0;
+	}
+}
+
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+{
+	if (hi2c->Instance == I2C1) {
+		oled_i2c_dma_done = 1;
+		oled_i2c_dma_error = 1;
+	}
+}
 
 
 
